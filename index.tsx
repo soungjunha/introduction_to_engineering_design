@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, Modal, Pressable } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, Modal, Pressable, ActivityIndicator } from 'react-native';
 
 const App = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedButton, setSelectedButton] = useState('');
   const [counters, setCounters] = useState<Record<string, number>>({});
-  const [purpleModalVisible, setPurpleModalVisible] = useState(false);
   const [previousCount, setPreviousCount] = useState<number>(0);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [paymentInProgress, setPaymentInProgress] = useState(false);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
 
   const buttons = [
     { id: 1, title: 'Button 1', image: { uri: 'https://e7.pngegg.com/pngimages/298/457/png-clipart-red-circle-button-miscellaneous-button-png.png' } },
@@ -30,9 +32,29 @@ const App = () => {
   };
 
   const handleModalButtonPress = (buttonName: string) => {
-    const ttsMessage = `You pressed ${buttonName}`;
+    const ttsMessage = `${buttonName}을 클릭하셨습니다.`;
     const speech = new window.SpeechSynthesisUtterance(ttsMessage);
     window.speechSynthesis.speak(speech);
+  };
+
+  const handlePayment = () => {
+    const paymentMessage = "결제가 진행중입니다. 잠시만 기다려 주세요";
+    const paymentSpeech = new window.SpeechSynthesisUtterance(paymentMessage);
+    window.speechSynthesis.speak(paymentSpeech);
+    setPaymentInProgress(true);
+    setModalVisible(false);
+    setInfoModalVisible(false);
+    setPaymentModalVisible(true);
+    setTimeout(() => {
+      const completionMessage = "결제가 완료되었습니다";
+      const completionSpeech = new window.SpeechSynthesisUtterance(completionMessage);
+      window.speechSynthesis.speak(completionSpeech);
+      // Reset state and return to initial screen
+      setCounters({});
+      setSelectedButton('');
+      setPaymentInProgress(false);
+      setPaymentModalVisible(false);
+    }, 10000);
   };
 
   return (
@@ -47,30 +69,43 @@ const App = () => {
       </ScrollView>
       <View style={styles.footer}>
         <ScrollView horizontal contentContainerStyle={styles.footerContainer} showsHorizontalScrollIndicator={false}>
-          {Object.keys(counters).map((key) => (
-            <View key={key} style={styles.footerItem}>
-              <Text style={styles.footerText}>
-                {key} * {counters[key]}
-              </Text>
-              <Pressable
-                style={[styles.counterButton, styles.buttonMinus]}
-                onPress={() => {
-                  setCounters((prevCounters) => {
-                    const newCounters = { ...prevCounters };
-                    delete newCounters[key];
-                    return newCounters;
-                  });
-                }}
-              >
-                <Text style={styles.textStyle}>-</Text>
-              </Pressable>
-            </View>
-          ))}
+          {Object.keys(counters).map((key) =>
+            counters[key] > 0 ? (
+              <View key={key} style={styles.footerItem}>
+                <Text style={styles.footerText}>{key} * {counters[key]}</Text>
+                <Pressable
+                  style={[styles.counterButton, styles.buttonMinus]}
+                  onPress={() => {
+                    setCounters((prevCounters) => {
+                      const newCounters = { ...prevCounters };
+                      delete newCounters[key];
+                      return newCounters;
+                    });
+                    const ttsMessage = `${key} 항목이 제거되었습니다`;
+                    const speech = new window.SpeechSynthesisUtterance(ttsMessage);
+                    window.speechSynthesis.speak(speech);
+                  }}
+                >
+                  <Text style={styles.textStyle}>-</Text>
+                </Pressable>
+              </View>
+            ) : null
+          )}
         </ScrollView>
-        <Pressable style={styles.purpleButton} onPress={() => setPurpleModalVisible(true)}>
-          <Text style={styles.purpleButtonText}>Purple Button</Text>
-        </Pressable>
       </View>
+      <TouchableOpacity style={styles.infoButton} onPress={() => {
+          setInfoModalVisible(true);
+          const infoTTSMessage = Object.keys(counters).length > 0
+            ? Object.keys(counters).map((key) => counters[key] > 0 ? `${key}를 ${counters[key]}개 선택하셨습니다.` : '').filter(Boolean).join(' ')
+            : '선택된 항목이 없습니다.';
+          const infoSpeech = new window.SpeechSynthesisUtterance(infoTTSMessage);
+          window.speechSynthesis.speak(infoSpeech);
+          const aattsMessage = `결제하기를 원하실경우 결제하기버튼(연두색)을 클릭하여주세요. 장바구니를 나가기를 원하실경우 취소버튼(빨간색)을 클릭하여주세요.`;
+          const aaspeech = new window.SpeechSynthesisUtterance(aattsMessage);
+          window.speechSynthesis.speak(aaspeech);
+        }}>
+        <Text style={styles.infoButtonText}>결제하기</Text>
+      </TouchableOpacity>
       <Modal
         animationType="slide"
         transparent={true}
@@ -82,29 +117,43 @@ const App = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalView}>
             <Text style={styles.modalText}>{selectedButton}</Text>
-            <Text style={styles.modalText}>Do you want to proceed?</Text>
+            <Text style={styles.modalText}> 얼마나 구배하시겠습니까?</Text>
             <View style={styles.counterContainer}>
               <Pressable
                 style={[styles.counterButton, styles.buttonMinus]}
                 onPress={() => {
                   handleModalButtonPress('Minus');
-                  setCounters((prevCounters) => ({
-                    ...prevCounters,
-                    [selectedButton]: (prevCounters[selectedButton] || 1) > 1 ? prevCounters[selectedButton] - 1 : 1,
-                  }));
+                  setCounters((prevCounters) => {
+                    const newCount = Math.max((prevCounters[selectedButton] || 0) - 1, 0);
+                    const newCounters = {
+                      ...prevCounters,
+                      [selectedButton]: newCount,
+                    };
+                    const ttsMessage = `${selectedButton} 수량은 현재 ${counters[newCount]}개 입니다.`;
+                    const speech = new window.SpeechSynthesisUtterance(ttsMessage);
+                    window.speechSynthesis.speak(speech);
+                    return newCounters;
+                  });
                 }}
               >
                 <Text style={styles.textStyle}>-</Text>
               </Pressable>
-              <Text style={styles.counterText}>{counters[selectedButton] || 1}</Text>
+              <Text style={styles.counterText}>{counters[selectedButton] || 0}</Text>
               <Pressable
                 style={[styles.counterButton, styles.buttonPlus]}
                 onPress={() => {
                   handleModalButtonPress('Plus');
-                  setCounters((prevCounters) => ({
-                    ...prevCounters,
-                    [selectedButton]: (prevCounters[selectedButton] || 1) + 1,
-                  }));
+                  setCounters((prevCounters) => {
+                    const newCount = (prevCounters[selectedButton] || 0) + 1;
+                    const newCounters = {
+                      ...prevCounters,
+                      [selectedButton]: newCount,
+                    };
+                    const ttsMessage = `현재 ${selectedButton}의 수량은 ${newCount}개 입니다.`;
+                    const speech = new window.SpeechSynthesisUtterance(ttsMessage);
+                    window.speechSynthesis.speak(speech);
+                    return newCounters;
+                  });
                 }}
               >
                 <Text style={styles.textStyle}>+</Text>
@@ -114,7 +163,7 @@ const App = () => {
               <Pressable
                 style={[styles.buttonModal, styles.buttonClose]}
                 onPress={() => {
-                  handleModalButtonPress('No');
+                  handleModalButtonPress('취소');
                   setModalVisible(!modalVisible);
                   setCounters((prevCounters) => ({
                     ...prevCounters,
@@ -123,21 +172,17 @@ const App = () => {
                   setSelectedButton('');
                 }}
               >
-                <Text style={styles.textStyle}>No</Text>
+                <Text style={styles.textStyle}>취소</Text>
               </Pressable>
               <Pressable
                 style={[styles.buttonModal, styles.buttonYes]}
                 onPress={() => {
-                  handleModalButtonPress('Yes');
-                  setCounters((prevCounters) => ({
-                    ...prevCounters,
-                    [selectedButton]: (prevCounters[selectedButton] || 0) + 1,
-                  }));
+                  handleModalButtonPress('담기');
                   setModalVisible(!modalVisible);
                   setSelectedButton('');
                 }}
               >
-                <Text style={styles.textStyle}>Yes</Text>
+                <Text style={styles.textStyle}>담기</Text>
               </Pressable>
             </View>
           </View>
@@ -146,32 +191,63 @@ const App = () => {
       <Modal
         animationType="slide"
         transparent={true}
-        visible={purpleModalVisible}
+        visible={infoModalVisible}
         onRequestClose={() => {
-          setPurpleModalVisible(!purpleModalVisible);
+          setInfoModalVisible(!infoModalVisible);
         }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalView}>
-            <Text style={styles.modalText}>Purple Button Modal</Text>
-            <Text style={styles.modalText}>This is a modal triggered by the purple button.</Text>
-            <ScrollView contentContainerStyle={styles.footerContainer} showsHorizontalScrollIndicator={false}>
-              {Object.keys(counters).map((key) => (
-                <View key={key} style={styles.footerItem}>
-                  <Text style={styles.footerText}>
-                    {key} was selected {counters[key]} times
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-            <Pressable
-              style={[styles.buttonModal, styles.buttonClose]}
-              onPress={() => {
-                setPurpleModalVisible(!purpleModalVisible);
-              }}
-            >
-              <Text style={styles.textStyle}>Close</Text>
-            </Pressable>
+            <Text style={styles.modalText}>장바구니</Text>
+            {paymentInProgress ? (
+              <Text style={styles.modalText}>결제가 진행중입니다</Text>
+            ) : Object.keys(counters).length > 0 ? (
+              <View style={styles.infoContentContainer}>
+                {Object.keys(counters).map((key) =>
+                  counters[key] > 0 ? (
+                    <View key={key} style={styles.footerItem}>
+                      <Text style={styles.infoText}>{key} * {counters[key]}</Text>
+                    </View>
+                  ) : null
+                )}
+              </View>
+            ) : (
+              <Text style={styles.infoText}>비어 있음</Text>
+            )}
+            <View style={styles.modalButtonContainer}>
+              <Pressable
+                style={[styles.buttonModal, styles.paymentcancelButton]}
+                onPress={() => {
+                  handleModalButtonPress('취소');
+                  setInfoModalVisible(!infoModalVisible);
+                }}
+              >
+                <Text style={styles.textStyle}>취소</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.buttonModal, styles.paymentButton]}
+                onPress={() => {
+                  handlePayment();
+                }}
+              >
+                <Text style={styles.textStyle}> 결제하기</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={paymentModalVisible}
+        onRequestClose={() => {
+          setPaymentModalVisible(!paymentModalVisible);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>결제가 진행중입니다</Text>
+            <ActivityIndicator size="large" color="#0000ff" style={styles.spinner} />
           </View>
         </View>
       </Modal>
@@ -198,10 +274,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  footerText: {
+  footerText: { 
     color: 'white',
     fontSize: 16,
     marginVertical: 2,
+  },
+  infoText: {
+    color: 'black',
+    fontSize: 16,
+    marginVertical: 2
   },
   container: {
     flexDirection: 'row',
@@ -268,7 +349,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonClose: {
-    backgroundColor: '#FFD700',
+    backgroundColor: '#f44336',
   },
   buttonYes: {
     backgroundColor: '#0000FF'
@@ -300,16 +381,35 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginHorizontal: 20,
   },
-  purpleButton: {
-    backgroundColor: '#DDA0DD',
+  infoButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#008080',
     padding: 15,
-    borderRadius: 10,
-    marginLeft: 10,
+    borderRadius: 50,
+    elevation: 5,
   },
-  purpleButtonText: {
+  infoButtonText: {
     color: 'white',
     fontSize: 16,
     textAlign: 'center',
+  },
+  infoContentContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+  },
+  paymentButton: {
+    backgroundColor: '#32CD32',
+    marginTop: 20,
+  },
+  paymentcancelButton: {
+    backgroundColor: '#f44336',
+    marginTop: 20,
+  },
+  spinner: {
+    marginTop: 20,
   },
 });
 
